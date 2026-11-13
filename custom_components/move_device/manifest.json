@@ -1,0 +1,25 @@
+{
+  "domain": "move_device",
+  "name": "Move Device",
+  "after_dependencies": [
+    "automation",
+    "frontend",
+    "panel_custom",
+    "scene",
+    "script"
+  ],
+  "codeowners": [
+    "@donavanbecker"
+  ],
+  "config_flow": true,
+  "dependencies": [
+    "http",
+    "websocket_api"
+  ],
+  "documentation": "https://github.com/bisman-automations/ha-move-device",
+  "integration_type": "service",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/bisman-automations/ha-move-device/issues",
+  "single_config_entry": true,
+  "version": "0.1.0"
+}

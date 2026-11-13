@@ -1,0 +1,13 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Move Device",
+        "description": "Adds **Move Device** to the sidebar for administrators. Pick devices there, pick the area they're moving to, check the new names, and move them."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Move Device is already added."
+    }
+  }
+}
