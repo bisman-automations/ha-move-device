@@ -6,36 +6,38 @@ Found two ways, together:
   which cover every automation, script and scene however it was made, but
   only entity IDs in targets and fields, not inside templates.
 - The UI-made files (``automations.yaml``, ``scripts.yaml``,
-  ``scenes.yaml``), read item by item, which also catches IDs inside
-  templates.
+  ``scenes.yaml``), read item by item (in the executor), which also catches
+  IDs inside templates.
 
-Only those three files are ever changed, and only when the person ticks
-**Update**. The change is a whole-ID text replacement on the raw file, so
-comments, ``!secret`` and ``!include`` stay as they are. A copy of the file is
-kept next to it first. Anything defined elsewhere (packages, other YAML
-files, helpers) is listed to change by hand.
+This module only **finds** and **lists**. It never writes a file, never
+reloads anything, and never changes another integration's config entry.
+Each :class:`Reference` says whether it was made in the Home Assistant
+editor (``in_editor``), so the panel can link straight to the editor where
+the person updates it. Anything defined elsewhere (packages, other YAML
+files) and helpers are listed to change by hand. Rewriting the YAML for the
+person was removed in 0.2.0 after the HACS review (hacs/default#14121):
+editing those files behind the editor's back is not something an integration
+should do.
 """
 
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
 import json
 import logging
 from pathlib import Path
-import shutil
 from typing import Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
-from homeassistant.util.file import write_utf8_file_atomic
 
-from .const import BACKUP_SUFFIX, DOMAIN
-from .names import replace_entity_ids, uses_entity_ids
+from .const import DOMAIN
+from .names import uses_entity_ids
 
 _LOGGER = logging.getLogger(__name__)
 
-# kind -> (file name in the config folder, integration that reloads it)
+# kind -> the file in the config folder the Home Assistant editor saves it to.
+# Read only, to find entity IDs inside templates; never written.
 UI_FILES: dict[str, str] = {
     "automation": "automations.yaml",
     "script": "scripts.yaml",
@@ -45,12 +47,20 @@ UI_FILES: dict[str, str] = {
 
 @dataclass
 class Reference:
-    """One automation, script, scene or helper that uses a renamed ID."""
+    """One automation, script, scene or helper that uses a renamed ID.
+
+    ``in_editor`` is True for an automation, script or scene made in the
+    Home Assistant editor: ``item_id`` then opens it there
+    (``/config/<kind>/edit/<item_id>``) and the person updates it to the new
+    entity IDs. False means it lives in YAML Move Device doesn't know the
+    editor can open (a package, an ``!include``), or it is a helper; the
+    person changes those by hand.
+    """
 
     kind: str
     name: str
     uses: list[str]
-    editable: bool
+    in_editor: bool
     entity_id: str | None = None
     item_id: str | None = None
     entry_id: str | None = None
@@ -206,7 +216,7 @@ async def async_find(
                 kind=item.kind,
                 name=_name(hass, entity_id, item.alias or item.item_id),
                 uses=uses,
-                editable=True,
+                in_editor=True,
                 entity_id=entity_id,
                 item_id=item.item_id,
             )
@@ -222,7 +232,7 @@ async def async_find(
                     kind=kind,
                     name=_name(hass, entity_id, entity_id),
                     uses=[old],
-                    editable=entity_id in ui_entities,
+                    in_editor=entity_id in ui_entities,
                     entity_id=entity_id,
                     item_id=_item_for_entity(hass, entity_id),
                 )
@@ -242,7 +252,7 @@ async def async_find(
                         kind="helper",
                         name=entry.title,
                         uses=uses,
-                        editable=False,
+                        in_editor=False,
                         entry_id=entry.entry_id,
                         domain=entry.domain,
                     )
@@ -261,39 +271,3 @@ async def async_find(
                 )
             )
     return found
-
-
-def _rewrite_files(
-    config_dir: str, kinds: set[str], renames: dict[str, str]
-) -> dict[str, int]:
-    """Replace whole entity IDs in the UI-made files. Runs in the executor."""
-    stamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    counts: dict[str, int] = {}
-    for kind in sorted(kinds):
-        path = Path(config_dir) / UI_FILES[kind]
-        if not path.is_file():
-            continue
-        text = path.read_text(encoding="utf-8")
-        new_text, count = replace_entity_ids(text, renames)
-        if not count:
-            continue
-        shutil.copy2(path, path.with_name(f"{path.name}.{stamp}{BACKUP_SUFFIX}"))
-        write_utf8_file_atomic(str(path), new_text)
-        counts[kind] = count
-    return counts
-
-
-async def async_update(
-    hass: HomeAssistant, references: list[Reference], renames: dict[str, str]
-) -> dict[str, int]:
-    """Update the UI-made files the editable references live in, then reload."""
-    kinds = {ref.kind for ref in references if ref.editable and ref.kind in UI_FILES}
-    if not kinds or not renames:
-        return {}
-    counts = await hass.async_add_executor_job(
-        _rewrite_files, hass.config.config_dir, kinds, renames
-    )
-    for kind in counts:
-        if hass.services.has_service(kind, "reload"):
-            await hass.services.async_call(kind, "reload", blocking=True)
-    return counts

@@ -1,7 +1,8 @@
 """The sidebar panel's API: ``move_device/preview`` and ``move_device/apply``.
 
 Both are admin only: a move renames other integrations' devices and
-entities, and can edit automations, scripts and scenes.
+entities. Neither edits an automation, script, scene or helper; what uses
+the old entity IDs is only listed, for the person to update in the editor.
 """
 
 from __future__ import annotations
@@ -81,7 +82,6 @@ async def ws_preview(
                 }
             )
         ],
-        vol.Optional("update_references", default=False): bool,
     }
 )
 @websocket_api.require_admin
@@ -95,7 +95,6 @@ async def ws_apply(
             msg["area_id"],
             msg["devices"],
             msg["entities"],
-            update_references=msg["update_references"],
             context=connection.context(msg),
         )
     except HomeAssistantError as err:

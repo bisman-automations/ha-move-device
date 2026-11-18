@@ -23,7 +23,7 @@ from homeassistant.helpers import (
 
 from .const import EVENT_MOVED
 from .names import swap_name, swap_object_id, valid_entity_id
-from .references import Reference, async_find, async_update
+from .references import Reference, async_find
 
 
 @dataclass
@@ -218,7 +218,6 @@ async def async_apply(
     devices_in: list[Mapping[str, Any]],
     entities_in: list[Mapping[str, Any]],
     *,
-    update_references: bool,
     context: Any = None,
 ) -> dict[str, Any]:
     """Move and rename what the preview (with the person's edits) lists.
@@ -228,6 +227,11 @@ async def async_apply(
     alone. Every new entity ID is checked again; one that is invalid, in
     another domain or already used fails the whole move before anything
     changes.
+
+    Only the device and entity registries change. Automations, scripts,
+    scenes and helpers that use a renamed entity ID are returned in
+    ``needs_updating`` (found before the IDs change), each with the
+    old -> new IDs it uses, for the person to update in the editor.
     """
     areas = ar.async_get(hass)
     if areas.async_get_area(area_id) is None:
@@ -305,21 +309,17 @@ async def async_apply(
                     entities.async_update_entity(entity.entity_id, area_id=area_id)
         moved.append(device.id)
 
-    updated: dict[str, int] = {}
-    if update_references and references:
-        updated = await async_update(hass, references, renames)
-
-    left = [
-        ref.as_dict()
+    # Nothing is edited for the person: list what still uses the old IDs,
+    # with the new ID for each, so the panel can link to the editor.
+    needs_updating = [
+        {**ref.as_dict(), "renames": {old: renames[old] for old in ref.uses}}
         for ref in references
-        if not (ref.editable and ref.kind in updated)
     ]
     result = {
         "area_id": area_id,
         "moved": moved,
         "renamed_entities": renamed_entities,
-        "updated": updated,
-        "left_to_update": left,
+        "needs_updating": needs_updating,
     }
     hass.bus.async_fire(
         EVENT_MOVED,

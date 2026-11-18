@@ -6,7 +6,10 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_mock_service,
+)
 
 from custom_components.move_device.const import DOMAIN, EVENT_MOVED
 from homeassistant.core import HomeAssistant
@@ -175,7 +178,8 @@ async def test_preview(hass: HomeAssistant, hass_ws_client, home) -> None:
     refs = preview["references"]
     assert len(refs) == 1
     assert refs[0]["kind"] == "automation"
-    assert refs[0]["editable"] is True
+    assert refs[0]["in_editor"] is True
+    assert "editable" not in refs[0]
     assert refs[0]["item_id"] == "1001"
     assert sorted(refs[0]["uses"]) == sorted([home["light"], home["temp"]])
 
@@ -231,11 +235,17 @@ async def test_preview_unknown_area(hass: HomeAssistant, hass_ws_client, home) -
     assert not reply["success"]
 
 
-async def test_apply_moves_renames_and_updates(
+async def test_apply_moves_renames_and_lists_what_needs_updating(
     hass: HomeAssistant, hass_ws_client, home
 ) -> None:
+    """The registries change; automations are listed with old -> new IDs, not edited."""
     events = []
     hass.bus.async_listen(EVENT_MOVED, events.append)
+    # Stand in for the reload services so any call to them is recorded.
+    reload_calls = {
+        kind: async_mock_service(hass, kind, "reload")
+        for kind in ("automation", "script", "scene")
+    }
     reply = await _ws(
         hass,
         hass_ws_client,
@@ -254,7 +264,6 @@ async def test_apply_moves_renames_and_updates(
                     "new_name": "Office Temperature",
                 },
             ],
-            "update_references": True,
         },
     )
     assert reply["success"], reply
@@ -274,22 +283,54 @@ async def test_apply_moves_renames_and_updates(
     # A device not in the move stays.
     assert devices.async_get(home["bystander"].id).area_id is None
 
-    text = (home["path"] / "automations.yaml").read_text()
-    assert "light.desk_lamp" in text
-    assert "states('sensor.office_temperature')" in text
-    assert "light.kitchen_lamp_2" in text
-    assert "# Made in the UI" in text
-    backups = list(home["path"].glob("automations.yaml.*.move_device.bak"))
-    assert len(backups) == 1
-    assert backups[0].read_text() == AUTOMATIONS
-    assert result["updated"] == {"automation": 2}
-    assert result["left_to_update"] == []
+    # The automation is listed for the editor, with the new ID for each old one.
+    assert [ref["item_id"] for ref in result["needs_updating"]] == ["1001"]
+    ref = result["needs_updating"][0]
+    assert ref["in_editor"] is True
+    assert ref["kind"] == "automation"
+    assert ref["renames"] == {
+        home["light"]: "light.desk_lamp",
+        home["temp"]: "sensor.office_temperature",
+    }
+    assert "updated" not in result
+    assert "left_to_update" not in result
+
+    # ...and nothing was edited, copied or reloaded for the person.
+    assert (home["path"] / "automations.yaml").read_text() == AUTOMATIONS
+    assert not list(home["path"].glob("*.bak"))
+    assert not any(reload_calls.values())
     assert events and events[0].data["renamed"][home["light"]] == "light.desk_lamp"
 
 
-async def test_apply_without_updating_lists_what_is_left(
+async def test_apply_without_renaming_ids_lists_nothing(
     hass: HomeAssistant, hass_ws_client, home
 ) -> None:
+    """Moving without changing entity IDs leaves nothing to update."""
+    reply = await _ws(
+        hass,
+        hass_ws_client,
+        {
+            "type": "move_device/apply",
+            "area_id": home["office"].id,
+            "devices": [{"device_id": home["lamp"].id}],
+        },
+    )
+    assert reply["success"], reply
+    assert reply["result"]["needs_updating"] == []
+    assert reply["result"]["renamed_entities"] == []
+    assert (home["path"] / "automations.yaml").read_text() == AUTOMATIONS
+
+
+async def test_apply_lists_helpers_to_change_by_hand(
+    hass: HomeAssistant, hass_ws_client, home
+) -> None:
+    """A helper (another config entry) that uses an old ID is listed, not edited."""
+    helper = MockConfigEntry(
+        domain="template",
+        title="Lamp watcher",
+        options={"state": "{{ is_state('light.kitchen_lamp', 'on') }}"},
+    )
+    helper.add_to_hass(hass)
     reply = await _ws(
         hass,
         hass_ws_client,
@@ -303,8 +344,37 @@ async def test_apply_without_updating_lists_what_is_left(
         },
     )
     assert reply["success"], reply
-    assert reply["result"]["updated"] == {}
-    assert [ref["item_id"] for ref in reply["result"]["left_to_update"]] == ["1001"]
+    by_kind = {ref["kind"]: ref for ref in reply["result"]["needs_updating"]}
+    assert set(by_kind) == {"automation", "helper"}
+    assert by_kind["helper"]["in_editor"] is False
+    assert by_kind["helper"]["entry_id"] == helper.entry_id
+    assert by_kind["helper"]["renames"] == {home["light"]: "light.office_lamp"}
+    # The helper's options are untouched.
+    entry = hass.config_entries.async_get_entry(helper.entry_id)
+    assert "light.kitchen_lamp" in entry.options["state"]
+
+
+async def test_apply_no_longer_takes_update_references(
+    hass: HomeAssistant, hass_ws_client, home
+) -> None:
+    """The option to rewrite automations.yaml for the person is gone."""
+    reply = await _ws(
+        hass,
+        hass_ws_client,
+        {
+            "type": "move_device/apply",
+            "area_id": home["office"].id,
+            "devices": [{"device_id": home["lamp"].id}],
+            "entities": [
+                {"entity_id": home["light"], "new_entity_id": "light.office_lamp"}
+            ],
+            "update_references": True,
+        },
+    )
+    assert not reply["success"]
+    assert reply["error"]["code"] == "invalid_format"
+    # Rejected before anything changed.
+    assert dr.async_get(hass).async_get(home["lamp"].id).area_id == home["kitchen"].id
     assert (home["path"] / "automations.yaml").read_text() == AUTOMATIONS
 
 

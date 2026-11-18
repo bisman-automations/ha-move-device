@@ -4,6 +4,12 @@
 // how names change. 3. Preview: every name and entity ID can be edited or
 // left alone, linked devices can be left behind, and the automations,
 // scripts, scenes and helpers that use the old IDs are listed. 4. Move.
+//
+// Move Device never edits an automation, script, scene or helper. What uses
+// an old entity ID is listed before and after the move, split into
+// "Needs updating in the editor" (with a link that opens it in the Home
+// Assistant editor) and "Change by hand" (helpers and YAML outside the
+// editor), with the old -> new entity ID for each.
 
 const esc = (value) =>
   String(value ?? "").replace(
@@ -24,6 +30,9 @@ const editUrl = (ref) => {
   return null;
 };
 
+// Made in the Home Assistant editor, so the link opens it there.
+const inEditor = (ref) => ref.in_editor && ref.kind !== "helper" && !!ref.item_id;
+
 class MoveDevicePanel extends HTMLElement {
   constructor() {
     super();
@@ -41,7 +50,6 @@ class MoveDevicePanel extends HTMLElement {
     };
     this._preview = null;
     this._edits = { devices: {}, entities: {}, skip: new Set() };
-    this._updateRefs = false;
     this._busy = false;
     this._error = "";
     this._result = null;
@@ -190,7 +198,6 @@ class MoveDevicePanel extends HTMLElement {
         area_id: preview.area_id,
         devices,
         entities,
-        update_references: this._updateRefs,
       });
       this._preview = null;
       this._selected.clear();
@@ -308,7 +315,6 @@ class MoveDevicePanel extends HTMLElement {
     const refs = (p.references || [])
       .map((r) => ({ ...r, uses: r.uses.filter((id) => id in renames) }))
       .filter((r) => r.uses.length);
-    const editable = refs.filter((r) => r.editable && r.kind !== "helper");
     const moving = p.devices.filter((d) => !this._edits.skip.has(d.device_id));
     const deviceName = (id) => p.devices.find((d) => d.device_id === id)?.name || id;
     return `<section class="card">
@@ -339,15 +345,8 @@ class MoveDevicePanel extends HTMLElement {
     <section class="card">
       <h2>4. What uses the old entity IDs</h2>
       ${refs.length
-        ? `<ul class="refs">${refs
-            .map((r) => {
-              const url = editUrl(r);
-              const where = r.kind === "helper" || !r.editable ? "Change by hand" : "Can be updated";
-              return `<li><span class="badge ${r.editable && r.kind !== "helper" ? "ok" : "warn"}">${where}</span>
-                <strong>${esc(KIND_LABEL[r.kind] || r.kind)}: ${url ? `<a href="${esc(url)}" target="_blank" rel="noreferrer">${esc(r.name)}</a>` : esc(r.name)}</strong>
-                <small>${r.uses.map((id) => `${esc(id)} → ${esc(renames[id])}`).join(", ")}</small></li>`;
-            })
-            .join("")}</ul>`
+        ? `<p class="muted">Move Device doesn't change these. After the move, open each one and switch it to the new entity ID. They're listed again when the move is done.</p>
+          ${this._renderRefs(refs, (id) => renames[id])}`
         : `<p class="muted">Nothing found using the entity IDs that change. Dashboards aren't checked: look over any cards that show these devices.</p>`}
       ${(p.area_targets || []).length
         ? `<h3>Area targets</h3><ul class="refs">${p.area_targets
@@ -357,11 +356,6 @@ class MoveDevicePanel extends HTMLElement {
               <small>targets ${esc(this._areaName(t.area_id))}, so ${t.leaving ? "it won't include the moved devices any more" : "it will include the moved devices"}</small></li>`,
             )
             .join("")}</ul>`
-        : ""}
-      ${editable.length
-        ? `<label class="check"><input type="checkbox" data-act="refs" ${this._updateRefs ? "checked" : ""}>
-            <span>Update the ${editable.length} marked "Can be updated" to the new entity IDs
-            <small>Only automations, scripts and scenes made in the UI (automations.yaml, scripts.yaml, scenes.yaml). A copy of each file is saved next to it first, ending in .move_device.bak. Everything else is listed again after the move.</small></span></label>`
         : ""}
       ${problems.length ? `<div class="error">${problems.map(esc).join("<br>")}</div>` : ""}
       <button class="primary" data-act="apply" ${this._busy || problems.length || !moving.length ? "disabled" : ""}>Move ${moving.length} device${moving.length === 1 ? "" : "s"}</button>
@@ -384,23 +378,44 @@ class MoveDevicePanel extends HTMLElement {
     </tr>`;
   }
 
+  // The automations, scripts, scenes and helpers that use an old entity ID,
+  // in two groups. `newId(old)` returns the ID it is being renamed to.
+  _renderRefs(refs, newId) {
+    const editor = refs.filter(inEditor);
+    const byHand = refs.filter((r) => !inEditor(r));
+    const item = (r, badge, linkText) => {
+      const url = editUrl(r);
+      const label = `${esc(KIND_LABEL[r.kind] || r.kind)}: ${esc(r.name)}`;
+      return `<li><strong>${label}</strong>
+        <small>${r.uses.map((id) => `${esc(id)} → <code>${esc(newId(id) || id)}</code>`).join(", ")}</small>
+        ${url ? `<a class="open" href="${esc(url)}" target="_blank" rel="noreferrer">${linkText}</a>` : `<span class="badge ${badge}">Not made in the editor</span>`}</li>`;
+    };
+    return `${editor.length
+        ? `<h3><span class="badge warn">Needs updating in the editor</span> ${editor.length}</h3>
+          <p class="muted">Made in the Home Assistant editor. Open each one and change the old entity ID to the new one, then save.</p>
+          <ul class="refs">${editor.map((r) => item(r, "warn", "Open in the editor")).join("")}</ul>`
+        : ""}
+      ${byHand.length
+        ? `<h3><span class="badge">Change by hand</span> ${byHand.length}</h3>
+          <p class="muted">Helpers, and automations, scripts or scenes kept in your own YAML files (packages or includes). Change the entity ID where they're set up.</p>
+          <ul class="refs">${byHand.map((r) => item(r, "", r.kind === "helper" ? "Open the integration" : "Open")).join("")}</ul>`
+        : ""}`;
+  }
+
   _renderResult() {
     const r = this._result;
-    const left = r.left_to_update || [];
-    const updated = Object.entries(r.updated || {});
+    const refs = r.needs_updating || [];
+    // old entity ID -> new one, from the entities the move renamed.
+    const renamed = Object.fromEntries(r.renamed_entities.map((e) => [e.entity_id, e.new_entity_id]));
     return `<section class="card done">
       <h2>Moved ${r.moved.length} device${r.moved.length === 1 ? "" : "s"} to ${esc(this._areaName(r.area_id))}</h2>
       ${r.renamed_entities.length ? `<p>${r.renamed_entities.length} entit${r.renamed_entities.length === 1 ? "y" : "ies"} renamed.</p>` : ""}
-      ${updated.length ? `<p>Updated ${updated.map(([k, n]) => `${n} use${n === 1 ? "" : "s"} in ${esc(k)}s`).join(", ")}, and reloaded them.</p>` : ""}
-      ${left.length
-        ? `<p><strong>Still to change by hand:</strong></p><ul class="refs">${left
-            .map((ref) => {
-              const url = editUrl(ref);
-              return `<li><strong>${esc(KIND_LABEL[ref.kind] || ref.kind)}: ${url ? `<a href="${esc(url)}" target="_blank" rel="noreferrer">${esc(ref.name)}</a>` : esc(ref.name)}</strong>
-                <small>uses ${ref.uses.map(esc).join(", ")}</small></li>`;
-            })
-            .join("")}</ul>`
-        : ""}
+      ${refs.length
+        ? `<p><strong>Still using the old entity IDs.</strong> Move Device didn't change these; update each one to the new entity ID.</p>
+          ${this._renderRefs(refs, (id) => renamed[id])}`
+        : r.renamed_entities.length
+          ? `<p class="muted">Nothing found that uses the old entity IDs. Dashboards aren't checked: look over any cards that show these devices.</p>`
+          : ""}
       <button class="link" data-act="dismiss">Done</button>
     </section>`;
   }
@@ -466,10 +481,6 @@ class MoveDevicePanel extends HTMLElement {
       if (act === "apply") return this._apply();
       if (act === "reset") this._edits = { devices: {}, entities: {}, skip: new Set() };
       if (act === "dismiss") this._result = null;
-      if (act === "refs") {
-        this._updateRefs = ev.currentTarget.checked;
-        return;
-      }
       if (act === "all" || act === "none") this._preview = null;
       this._render();
     });
@@ -513,6 +524,9 @@ const STYLE = `
   .refs { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
   .refs li { display: grid; gap: 2px; }
   .refs a { color: var(--primary-color); }
+  .refs a.open { justify-self: start; font-size: 13px; }
+  .refs code { font-size: 12px; }
+  h3 .badge { font-size: 12px; margin-right: 4px; }
   .badge { justify-self: start; font-size: 11px; padding: 1px 8px; border-radius: 10px; background: var(--secondary-background-color); }
   .badge.ok { background: rgba(67, 160, 71, 0.15); color: var(--success-color, #43a047); }
   .badge.warn { background: rgba(255, 160, 0, 0.18); color: var(--warning-color, #ffa000); }

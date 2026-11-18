@@ -96,23 +96,6 @@ def valid_entity_id(entity_id: str) -> bool:
     )
 
 
-def replace_entity_ids(text: str, renames: dict[str, str]) -> tuple[str, int]:
-    """Replace whole entity IDs in ``text``. Returns the text and the count.
-
-    An ID matches when it isn't part of a longer word: ``light.kitchen``
-    matches in ``states('light.kitchen')`` and ``states.light.kitchen.state``
-    but not in ``light.kitchen_2``.
-    """
-    if not renames:
-        return text, 0
-    pattern = re.compile(
-        r"(?<![\w])("
-        + "|".join(map(re.escape, sorted(renames, key=len, reverse=True)))
-        + r")(?!\w)"
-    )
-    return pattern.subn(lambda m: renames[m.group(1)], text)
-
-
 def uses_entity_ids(text: str, entity_ids: Iterable[str]) -> list[str]:
     """The entity IDs that appear whole in ``text``, in the order given."""
     found = []

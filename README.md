@@ -11,9 +11,9 @@
 [![Validate](https://github.com/bisman-automations/ha-move-device/actions/workflows/validate.yml/badge.svg)](https://github.com/bisman-automations/ha-move-device/actions/workflows/validate.yml)
 [![License](https://img.shields.io/github/license/bisman-automations/ha-move-device)](LICENSE)
 
-Move devices to another area (room) without hunting down every name that still says the old one. Move Device moves the devices you pick, and the devices linked to them, renames the devices and their entities for the new area, and shows you every automation, script, scene and helper that uses the old entity IDs, with the option to update them for you.
+Move devices to another area (room) without hunting down every name that still says the old one. Move Device moves the devices you pick, and the devices linked to them, renames the devices and their entities for the new area, and shows you every automation, script, scene and helper that uses the old entity IDs, with a link to open each one in the editor so you can update it.
 
-Nothing changes until you've seen the full list and pressed **Move**.
+Nothing changes until you've seen the full list and pressed **Move**. Move Device only changes devices and entities: it never edits your automations, scripts, scenes or helpers.
 
 ## Requirements
 
@@ -91,13 +91,11 @@ Entities that show their device's name (most do) have no name of their own, so o
 
 Changing an entity ID breaks anything that still uses the old one. Before the move, Move Device lists:
 
-- **Automations, scripts and scenes** that use an entity ID that's changing, including IDs inside templates. Each links to its editor.
-  - **Can be updated**: made in the Home Assistant editor (stored in `automations.yaml`, `scripts.yaml` or `scenes.yaml`). Tick **Update** and Move Device swaps the old entity IDs for the new ones and reloads them. A copy of each file it changes is saved next to it first, ending in `.move_device.bak`.
-  - **Change by hand**: written in other YAML files or packages. Move Device never edits those.
-- **Helpers** (groups, template helpers and other integrations' settings) that mention an old entity ID, to change by hand.
+- **Needs updating in the editor**: automations, scripts and scenes made in the Home Assistant editor that use an entity ID that's changing, including IDs inside templates. Each shows the old and new entity ID, and **Open in the editor** opens it so you can change the ID and save.
+- **Change by hand**: helpers (groups, template helpers and other integrations' settings) that mention an old entity ID, and automations, scripts and scenes written in your own YAML files or packages. Change the entity ID where they're set up.
 - **Area targets**: automations and scripts that target the old or the new area. They don't break, but a device that moves out of an area is no longer included when they run, and one that moves in is.
 
-After the move, anything still using the old IDs is listed again with links.
+Move Device doesn't change any of these for you. After the move, the same lists are shown again, with the new entity IDs, so you can work through them.
 
 Dashboards aren't checked. Look over any cards that show the moved devices.
 
@@ -111,8 +109,8 @@ Dashboards aren't checked. Look over any cards that show the moved devices.
 ## Troubleshooting
 
 - **A new entity ID is marked as already used.** Another entity has it. Pick a different ID for this one, or put back its old ID.
-- **An automation wasn't updated.** Only automations, scripts and scenes made in the Home Assistant editor can be updated. The rest are listed after the move with a link; change them by hand.
-- **I want the old file back.** The copy saved before the change sits next to it, for example `automations.yaml.20261113164500.move_device.bak`. Rename it back and reload automations.
+- **An automation stopped working after a move.** Move Device doesn't edit automations. Open it from **Needs updating in the editor** (shown before and after the move) and change the old entity ID to the new one. Home Assistant's own repairs also point out automations that use an entity ID that no longer exists.
+- **I used Update in Move Device 0.1.0.** That option was removed in 0.2.0. Files it already changed stay as they are; any `.move_device.bak` copies it made next to `automations.yaml`, `scripts.yaml` or `scenes.yaml` can be deleted once you're happy.
 - **Debug logs:** on the integration's page choose **Enable debug logging**,
   reproduce the problem, then **Disable debug logging** to download the log.
 - Report problems at [Issues](https://github.com/bisman-automations/ha-move-device/issues).

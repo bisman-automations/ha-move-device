@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from custom_components.move_device.names import (
-    replace_entity_ids,
     slug,
     swap_name,
     swap_object_id,
@@ -54,15 +53,15 @@ def test_slug_and_valid() -> None:
     assert not valid_entity_id("lightx")
 
 
-def test_replace_and_find_whole_ids() -> None:
+def test_find_whole_ids() -> None:
     text = (
         "entity_id: light.kitchen\n"
         "value: \"{{ states('light.kitchen') }} {{ states.light.kitchen.state }}\"\n"
         "other: light.kitchen_2\n"
     )
-    new, count = replace_entity_ids(text, {"light.kitchen": "light.office"})
-    assert count == 3
-    assert "light.kitchen_2" in new
-    assert "states.light.office.state" in new
-    assert replace_entity_ids(text, {}) == (text, 0)
     assert uses_entity_ids(text, ["light.kitchen", "light.den"]) == ["light.kitchen"]
+    # Part of a longer ID doesn't count.
+    assert uses_entity_ids("light.kitchen_2", ["light.kitchen"]) == []
+    assert uses_entity_ids("states.light.kitchen.state", ["light.kitchen"]) == [
+        "light.kitchen"
+    ]

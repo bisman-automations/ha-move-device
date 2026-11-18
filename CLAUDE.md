@@ -5,8 +5,9 @@ Marketplace or HACS. It moves devices to another area from an admin-only
 sidebar panel: the devices Home Assistant shows as linked move with them,
 device names, entity names and entity IDs are renamed by swapping the area's
 name (every suggestion can be edited), and the automations, scripts, scenes
-and helpers that use the old entity IDs are listed, with an option to update
-the UI-made ones. Read this before changing anything.
+and helpers that use the old entity IDs are listed with links to the editor,
+for the person to update. Move Device never edits them. Read this before
+changing anything.
 
 ## Layout
 
@@ -15,8 +16,7 @@ the UI-made ones. Read this before changing anything.
     panel's static path once; the config entry (`single_config_entry`, no
     options) adds and removes the sidebar panel.
   - `names.py`: **pure (no Home Assistant imports)**: `swap_name`,
-    `swap_object_id`, `slug`, `valid_entity_id`, `replace_entity_ids`,
-    `uses_entity_ids`. Whole words only, case ignored, longest phrase first.
+    `swap_object_id`, `slug`, `valid_entity_id`, `uses_entity_ids`. Whole words only, case ignored, longest phrase first.
   - `planner.py`: `async_preview` (changes nothing) and `async_apply`.
     Linked devices are those sharing an identifier or connection with a
     picked one (what **Linked devices** shows); read the device registry with
@@ -26,16 +26,17 @@ the UI-made ones. Read this before changing anything.
     Device names are written to `name_by_user`, entity names to the registry
     `name`; entities whose area was set to the device's old area follow it.
     `async_apply` checks every new entity ID (valid, same domain, unused)
-    before changing anything, and fires `move_device_moved`.
+    before changing anything, fires `move_device_moved`, and returns
+    `needs_updating`: every reference to a renamed ID, found before the
+    rename, each with `renames` (old -> new).
   - `references.py`: what uses the old IDs: core's `automations_with_entity`,
     `scripts_with_entity`, `scenes_with_entity`, plus each item of
     `automations.yaml`, `scripts.yaml` and `scenes.yaml` read as text (finds
     IDs in templates), plus every other config entry's data and options
     (helpers, listed only). Area targets come from `automations_with_area` /
-    `scripts_with_area`. Updating rewrites only those three files, as a
-    whole-ID text replacement on the raw file (comments, `!secret` and
-    `!include` stay), after copying each to
-    `<file>.<YYYYmmddHHMMSS>.move_device.bak`, then calls `<kind>.reload`.
+    `scripts_with_area`. Read only: nothing here writes a file, reloads,
+    or changes a config entry. `Reference.in_editor` marks the ones made
+    in the editor (`/config/<kind>/edit/<item_id>`).
   - `websocket.py`: `move_device/preview` and `move_device/apply`, both
     `require_admin`.
   - `panel.py` + `frontend/move-device-panel.js`: the admin sidebar panel,
@@ -43,7 +44,7 @@ the UI-made ones. Read this before changing anything.
     `hass.areas` / `hass.devices`; the server makes every suggestion.
 - `tests/ha/`: pytest inside Home Assistant (`test_names.py` covers the pure
   rules). Tests point `hass.config.config_dir` at `tmp_path` so the UI-made
-  files can be written.
+  files can be set up, and check a move leaves them byte for byte.
 
 ## Checks
 
@@ -54,9 +55,11 @@ dark theme.
 
 ## Conventions
 
-- Nothing changes without the preview. Never edit an automation, script,
-  scene or helper the person didn't ask to update, and never edit YAML
-  outside the three UI-made files.
+- Nothing changes without the preview. Never edit, rewrite or reload an
+  automation, script, scene or helper, and never write any YAML file: list
+  them with editor links instead. A YAML rewrite (and its `update_references`
+  option) was removed in 0.2.0 after the HACS review, hacs/default#14121;
+  don't bring it back.
 - Show names, not entity IDs, wherever the panel can; escape everything with
   `esc()`; use Home Assistant's theme variables.
 - Entity unique IDs never change; only entity IDs, names and areas do.
