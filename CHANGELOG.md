@@ -5,6 +5,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-11-21
+
+### Changed
+
+- **Ruff 0.17.6.** Linting uses the current Ruff release. Nothing changes for you.
+
 ## [0.2.0] - 2026-11-17
 
 ### Removed
@@ -26,5 +32,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **See what uses the old entity IDs.** Automations, scripts and scenes (including templates), helpers, and automations that target the old or new area are listed with links before the move and again after it.
 - **Update automations, scripts and scenes for you.** Ones made in the Home Assistant editor can be updated to the new entity IDs and reloaded, with a copy of each changed file saved first.
 
+[0.2.1]: https://github.com/bisman-automations/ha-move-device/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/bisman-automations/ha-move-device/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/bisman-automations/ha-move-device/releases/tag/v0.1.0
