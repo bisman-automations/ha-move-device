@@ -174,9 +174,11 @@ async def async_preview(
                     "shown_name": _shown_name(hass, entity),
                     "new_name": new_entity_name,
                     "own_area": entity.area_id,
+                    # Only when the device really changes area, as async_apply does.
                     "area_moves": bool(
                         entity.area_id
                         and device.area_id
+                        and device.area_id != area_id
                         and entity.area_id == device.area_id
                     ),
                     "disabled": entity.disabled_by is not None,
@@ -274,7 +276,7 @@ async def async_apply(
     # Find what uses the old IDs before they change.
     references: list[Reference] = []
     if renames:
-        found = await async_find(hass, list(renames), from_areas=set(), to_area=area_id)
+        found = await async_find(hass, list(renames), from_areas=set(), to_area=None)
         references = found.references
 
     renamed_entities = []

@@ -195,9 +195,13 @@ async def async_find(
     old_ids: list[str],
     *,
     from_areas: set[str],
-    to_area: str,
+    to_area: str | None,
 ) -> Found:
-    """Everything that uses ``old_ids``, and what targets the areas involved."""
+    """Everything that uses ``old_ids``, and what targets the areas involved.
+
+    ``to_area`` None (with no ``from_areas``) skips the area lookups: a move
+    that is being carried out only needs the references.
+    """
     found = Found()
     if old_ids:
         items = await hass.async_add_executor_job(
@@ -258,9 +262,10 @@ async def async_find(
                     )
                 )
     seen: set[tuple[str, bool]] = set()
-    for area_id, leaving in [(a, True) for a in sorted(from_areas)] + [
-        (to_area, False)
-    ]:
+    areas = [(a, True) for a in sorted(from_areas)]
+    if to_area is not None:
+        areas.append((to_area, False))
+    for area_id, leaving in areas:
         for kind, entity_id in _area_lookups(hass, area_id):
             if (entity_id, leaving) in seen:
                 continue

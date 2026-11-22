@@ -65,3 +65,22 @@ def test_find_whole_ids() -> None:
     assert uses_entity_ids("states.light.kitchen.state", ["light.kitchen"]) == [
         "light.kitchen"
     ]
+
+
+def test_uses_entity_ids_skips_patterns_for_absent_ids(monkeypatch) -> None:
+    """IDs that aren't in the text at all never get a pattern built and run."""
+    from custom_components.move_device import names
+
+    calls = []
+    real = names.re.search
+
+    def search(*args, **kwargs):
+        calls.append(args[0])
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(names.re, "search", search)
+    text = '{"entity_id": "light.kitchen"}'
+    assert uses_entity_ids(text, ["light.den", "sensor.hall", "light.kitchen"]) == [
+        "light.kitchen"
+    ]
+    assert len(calls) == 1

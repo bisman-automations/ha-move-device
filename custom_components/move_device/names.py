@@ -100,6 +100,12 @@ def uses_entity_ids(text: str, entity_ids: Iterable[str]) -> list[str]:
     """The entity IDs that appear whole in ``text``, in the order given."""
     found = []
     for entity_id in entity_ids:
-        if re.search(r"(?<![\w])" + re.escape(entity_id) + r"(?!\w)", text):
+        # A plain substring check first: most texts use none of the IDs, and
+        # this skips building and running a pattern for each of them.
+        if (
+            entity_id
+            and entity_id in text
+            and re.search(r"(?<![\w])" + re.escape(entity_id) + r"(?!\w)", text)
+        ):
             found.append(entity_id)
     return found

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 from pytest_homeassistant_custom_component.common import (
@@ -224,6 +225,50 @@ async def test_preview_custom_find_replace(
         },
     )
     assert reply["result"]["devices"][0]["new_name"] == "Study Lamp"
+
+
+async def test_preview_area_moves_only_when_the_device_moves(
+    hass: HomeAssistant, hass_ws_client, home
+) -> None:
+    """A device already in the area: its entities' areas don't move either."""
+    reply = await _ws(
+        hass,
+        hass_ws_client,
+        {
+            "type": "move_device/preview",
+            "device_ids": [home["lamp"].id],
+            "area_id": home["kitchen"].id,
+            "options": {"include_linked": False},
+        },
+    )
+    row = reply["result"]["devices"][0]
+    assert row["already_there"] is True
+    ents = {e["entity_id"]: e for e in row["entities"]}
+    assert ents[home["temp"]]["area_moves"] is False
+
+
+async def test_apply_skips_the_area_lookups(
+    hass: HomeAssistant, hass_ws_client, home
+) -> None:
+    """Carrying out a move doesn't look up area targets it would throw away."""
+    with patch(
+        "custom_components.move_device.references._area_lookups", return_value=[]
+    ) as lookups:
+        reply = await _ws(
+            hass,
+            hass_ws_client,
+            {
+                "type": "move_device/apply",
+                "area_id": home["office"].id,
+                "devices": [{"device_id": home["lamp"].id}],
+                "entities": [
+                    {"entity_id": home["light"], "new_entity_id": "light.desk_lamp"}
+                ],
+            },
+        )
+    assert reply["success"], reply
+    assert [ref["item_id"] for ref in reply["result"]["needs_updating"]] == ["1001"]
+    lookups.assert_not_called()
 
 
 async def test_preview_unknown_area(hass: HomeAssistant, hass_ws_client, home) -> None:
