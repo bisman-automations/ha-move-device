@@ -5,6 +5,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] - 2026-11-27
+
+### Changed
+
+- **The Move Device page opens faster.** Your browser now keeps the page's script instead of downloading it again every time you open it. After an update it loads the new one, as before.
+
 ## [0.2.2] - 2026-11-22
 
 ### Fixed
@@ -42,6 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **See what uses the old entity IDs.** Automations, scripts and scenes (including templates), helpers, and automations that target the old or new area are listed with links before the move and again after it.
 - **Update automations, scripts and scenes for you.** Ones made in the Home Assistant editor can be updated to the new entity IDs and reloaded, with a copy of each changed file saved first.
 
+[0.2.3]: https://github.com/bisman-automations/ha-move-device/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/bisman-automations/ha-move-device/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/bisman-automations/ha-move-device/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/bisman-automations/ha-move-device/compare/v0.1.0...v0.2.0

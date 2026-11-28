@@ -29,7 +29,7 @@ async def async_register_static(hass: HomeAssistant) -> None:
     from homeassistant.components.http import StaticPathConfig  # noqa: PLC0415
 
     await hass.http.async_register_static_paths(
-        [StaticPathConfig(STATIC_URL, str(FRONTEND_DIR), cache_headers=False)]
+        [StaticPathConfig(STATIC_URL, str(FRONTEND_DIR), cache_headers=True)]
     )
     hass.data[DATA_STATIC] = True
 
